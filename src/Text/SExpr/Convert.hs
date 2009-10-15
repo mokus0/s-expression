@@ -80,7 +80,7 @@ readsSExprAs a l str = [(foldSExpr (Atom . a) (List . l) x, rest) | (x,rest) <- 
 
 
 canonicalSExpr :: (Atom (Raw s)) => CharParser st (SExpr [] s)
-canonicalSExpr = parseSExprAs fromRaw id
+canonicalSExpr = parseSExprAs fromRaw fromCanonical
 
 advancedSExpr :: (Atom (Simple s)) => CharParser st (SExpr [] s)
 advancedSExpr = parseSExprAs fromSimple id
@@ -149,7 +149,7 @@ basicString :: (Atom (Raw s)) => SExpr [] s -> String
 basicString s = render (basic s)
 
 canonical :: (Atom (Raw s)) => SExpr [] s -> ShowS
-canonical = showSExprAs Raw id
+canonical = showSExprAs Raw Canonical
 
 canonicalString :: (Atom (Raw s)) => SExpr [] s -> String
 canonicalString s = canonical s ""
@@ -179,4 +179,4 @@ putSExprAs a l = putSExpr . foldSExpr (Atom . a) (List . l)
 
 
 putCanonical :: (Atom (Raw s)) => SExpr [] s -> Put
-putCanonical = putSExprAs Raw id
+putCanonical = putSExprAs Raw Canonical

@@ -1,5 +1,6 @@
 {-# LANGUAGE 
-        FlexibleInstances, FlexibleContexts
+        FlexibleInstances, FlexibleContexts,
+        GeneralizedNewtypeDeriving
   #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Text.SExpr.Convert.Instances where
@@ -91,3 +92,17 @@ instance List [] where
         put ')'
     parseList = sexprList
 
+newtype Canonical a = Canonical {fromCanonical :: [a]}
+    deriving (Functor)
+instance List Canonical where
+    showsList = showParen True . unwords' . fromCanonical
+        where
+            unwords' [] = id
+            unwords' [x] = x
+            unwords' (x:xs) = x . unwords' xs
+    printList = parens . cat . fromCanonical
+    putList (Canonical l) = do
+        put '('
+        sequence_ (intersperse (put ' ') l)
+        put ')'
+    parseList sexp = Canonical <$> sexprList sexp
