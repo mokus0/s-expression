@@ -5,7 +5,7 @@
         RankNTypes
   #-}
 
-module Codec.Sexpr.Type where
+module Text.SExpr.Type where
 
 import Control.Applicative
 import Control.Monad
@@ -22,30 +22,55 @@ import Data.Char (ord, isAlpha, isAlphaNum, isSpace)
 -- s-expressions at all.  
 -- 
 -- Examples of the former include versions of lists and atoms that retain 
--- whitespace and comments from the original source.
+-- whitespace and comments from the original source, or lists and/or atoms
+-- containing @IORef@s or other mutable references.
 -- 
 -- Examples of the latter include  intermediate stages of tree transformations
 -- from s-expressions to other structures (see the property-list package source
 -- for an example of a similar pattern in the use of the PropertyList type, 
--- where XML transformation is effected by
--- Monad operations).
+-- where XML transformation is effected by 'Monad' operations).
+
 data SExpr l a
     = Atom a
     | List (l (SExpr l a))
 
+-- |Construct an atom.
 atom :: a -> SExpr l a
 atom = Atom
 
-unAtom :: SExpr l a -> Maybe a
-unAtom (Atom a) = Just a
-unAtom _        = Nothing
+-- |A predicate for identifying atoms.
+isAtom :: SExpr l a -> Bool
+isAtom (Atom _) = True
+isAtom _        = False
 
+-- |Extract an atom.  This function is partial; it throws an error on non-atoms.
+unAtom :: SExpr l a -> a
+unAtom (Atom a) = a
+unAtom _        = error "unAtom called on a non-atom"
+
+-- |Extract an atom.  This function is total; it returns 'Nothing' on non-atoms.
+fromAtom :: SExpr l a -> Maybe a
+fromAtom (Atom a) = Just a
+fromAtom _        = Nothing
+
+-- |Construct a list.
 list :: l (SExpr l a) -> SExpr l a
 list = List
 
-unList :: SExpr l a -> Maybe (l (SExpr l a))
-unList (List l) = Just l
-unList _        = Nothing
+-- |A predicate for recognizing lists.
+isList :: SExpr l a -> Bool
+isList (List _) = True
+isList _        = False
+
+-- |Extract a list.  This function is partial; it throws an error on non-lists.
+unList :: SExpr l a -> l (SExpr l a)
+unList (List a) = a
+unList _        = error "unList called on a non-list"
+
+-- |Extract a list.  This function is total; it return 'Nothing' on non-lists.
+fromList :: SExpr l a -> Maybe (l (SExpr l a))
+fromList (List l) = Just l
+fromList _        = Nothing
 
 deriving instance (Eq       a, Eq       (l (SExpr l a))) => Eq       (SExpr l a)
 deriving instance (Ord      a, Ord      (l (SExpr l a))) => Ord      (SExpr l a)
@@ -103,7 +128,24 @@ matchSExpr a _ (Atom  x) = a x
 matchSExpr _ l (List xs) = l xs
 
 -- |Fold an s-expression; ie, substitute the given functions for each of
--- the data constructors.
+-- the data constructors.  For example, using types from the data-object 
+-- package:
+-- 
+-- > sexprToObject :: SExpr [] a -> GenObject key a
+-- > sexprToObject = foldSExpr Scalar Sequence
+--
+-- or, slightly less trivial:
+-- 
+-- > isKVPair (Sequence (Scalar k:val)) = not (null val)
+-- > isKVPair _ = False
+-- > 
+-- > toKVPair (Sequence [Scalar k,val]) = (k, val)
+-- > toKVPair (Sequence (Scalar k:val)) = (k, toObj val)
+-- > 
+-- > toObj xs | all isKVPair xs = Mapping (map toKVPair xs) 
+-- >          | otherwise       = Sequence xs
+-- > 
+-- > sexprToObject x = foldSExpr Scalar toObj (list [x])
 foldSExpr :: (Functor l) => (a -> b) -> (l b -> b) -> SExpr l a -> b
 foldSExpr = foldSExprBy fmap
 
@@ -117,33 +159,46 @@ foldSExprBy :: ((SExpr l a -> c) -> l (SExpr l a) -> b)
 foldSExprBy fm a l = go
     where go = matchSExpr a (l . fm go)
 
--- |systematically replace the list structures in a s-expression
+-- |systematically replace the list structures in an s-expression
 lmap :: Functor l1 => (l1 (SExpr l2 a) -> l2 (SExpr l2 a)) -> SExpr l1 a -> SExpr l2 a
 lmap f = foldSExpr Atom (List . f)
 
--- |systematically replace the list structures in a s-expression by means of a
+-- |systematically replace the list structures in an s-expression by means of a
 -- natural transformation from one list to the other (ie., the mapping does not
 -- depend in any way on the contents of each list)
 lmapNat :: Functor l1 => (forall t. l1 t -> l2 t) -> SExpr l1 a -> SExpr l2 a
 lmapNat f = foldSExpr Atom (List . f)
 
 -- |Rather than representing display hints at the 'SExpr' structure level, they
--- are represented as tags on the atoms.  Thus, an 'SExpr' with hints will
--- be represented by a type such as @SExpr [] (Hinted String)@.
+-- are represented as tags on the atoms.  Thus, an 'SExpr' with 'String' hints
+-- would be represented by a type such as @SExpr [] (Hinted String a)@.
 data Hinted h a
     = Hinted h a
-    | UnHinted a
+    | Unhinted a
     deriving (Eq, Ord, Show, Typeable, Data)
+
+-- |Construct a hinted atom with a MIME type hint.
+hinted :: h -> a -> Hinted h a
+hinted = Hinted
+
+-- |Construct a hinted atom without a MIME type hint.
+unhinted :: a -> Hinted h a
+unhinted = Unhinted
+
+-- |Deconstruct a hinted atom.
+fromHinted :: Hinted h a -> (Maybe h, a)
+fromHinted (Hinted h a) = (Just h,  a)
+fromHinted (Unhinted a) = (Nothing, a)
 
 instance Functor (Hinted h) where
     fmap f (Hinted h x) = Hinted h (f x)
-    fmap f (UnHinted x) = UnHinted (f x)
+    fmap f (Unhinted x) = Unhinted (f x)
 instance Foldable (Hinted h) where
     foldMap f (Hinted _ x) = f x
-    foldMap f (UnHinted x) = f x
+    foldMap f (Unhinted x) = f x
 instance Traversable (Hinted h) where
     sequenceA (Hinted h x) = fmap (Hinted h) x
-    sequenceA (UnHinted x) = fmap UnHinted   x
+    sequenceA (Unhinted x) = fmap Unhinted   x
 instance Arbitrary a => Arbitrary (Hinted String a) where
     arbitrary = oneof [arbHinted, arbUnhinted]
         where 
@@ -159,31 +214,43 @@ instance Arbitrary a => Arbitrary (Hinted String a) where
                 h <- resize hsz arbHint
                 x <- resize (sz - hsz) arbitrary
                 return (Hinted h x)
-            arbUnhinted = UnHinted <$> arbitrary
-    coarbitrary (UnHinted x) = variant 0 . coarbitrary x
+            arbUnhinted = Unhinted <$> arbitrary
+    coarbitrary (Unhinted x) = variant 0 . coarbitrary x
     coarbitrary (Hinted h x) = variant 1 . coarbitrary x . coarbitrary_h
         where 
             coarbitrary_h = foldr (\a b -> variant (ord a) . variant 1 . b) (variant 0) h
 
 
 -- |Any atom whose hint is not specified is assumed to be 
--- "text/plain; charset=iso-8859-1".  This is that default value.
+-- \"text/plain; charset=iso-8859-1\".  This is that default value.
 defaultHint :: String
 defaultHint = "text/plain; charset=iso-8859-1"
 
+-- |Extract the hint of a 'Hinted' atom.
 hint :: Hinted String a -> String
-hint (Hinted h _) = h
-hint (UnHinted _) = defaultHint
+hint = hintWithDefault defaultHint
+
+-- |Extract the hint of a 'Hinted' atom if one is explicitly given.
+maybeHint :: Hinted h s -> Maybe h
+maybeHint (Hinted h _) = Just h
+maybeHint (Unhinted _) = Nothing
+
+-- |Extract the hint of a 'Hinted' atom.
+hintWithDefault :: h -> Hinted h s -> h
+hintWithDefault _ (Hinted h _) = h
+hintWithDefault d (Unhinted _) = d
 
 -- |Discard the hint from an atom, or with 'fmap', from a whole 'SExpr' (eg,
 -- @fmap unHint :: SExpr l (Hinted a) -> SExpr l a@)
-unHint :: Hinted h a -> a
-unHint (Hinted _ x) = x
-unHint (UnHinted x) = x
+dropHint :: Hinted h a -> a
+dropHint (Hinted _ x) = x
+dropHint (Unhinted x) = x
 
+-- |Alter the hint and content of a 'Hinted' value.
+-- @mapHint f g@ applies @f@ to the hint and @g@ to the value.
 mapHint :: (a -> x) -> (b -> y) -> Hinted a b -> Hinted x y
 mapHint f g (Hinted h x) = Hinted (f h) (g x)
-mapHint _ g (UnHinted x) = UnHinted     (g x)
+mapHint _ g (Unhinted x) = Unhinted     (g x)
 
 ---------------------------------------
 -- Character predicates for encoding --

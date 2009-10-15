@@ -17,21 +17,38 @@ flag testing
     description: build test executable
     default: False
 
+flag old-sexpr-compat
+    description: Include compatibility wrapper module for (sexpr <= 0.2.1)
+    default: True
+
 library
     if flag(testing)
-       ghc-options: -Wall
-    Build-Depends: base, base64-string, mtl, pretty, bytestring, binary, parsec >= 3
-    Exposed-modules:    Codec.Sexpr
-    other-modules:      Codec.Sexpr.Parser
-                        Codec.Sexpr.Printer
-                        Codec.Sexpr.Token
-                        Codec.Sexpr.Token.Class
-                        Codec.Sexpr.Type
+       ghc-options:         -Wall
+    Build-Depends:          base, base64-string, mtl, pretty, bytestring, binary, parsec >= 3
+    hs-source-dirs:         src
+    Exposed-modules:        Text.SExpr
+                            Text.SExpr.Convert
+    if flag(old-sexpr-compat)
+        exposed-modules:    Codec.Sexpr
+    other-modules:          Text.SExpr.Parse
+                            Text.SExpr.Print
+                            Text.SExpr.Convert.Classes
+                            Text.SExpr.Convert.Instances
+                            Text.SExpr.Type
 
 executable sexpr-test
     if !flag(testing)
-        buildable: False
-        ghc-options: -Wall
-    main-is: Codec/Sexpr/Tests.hs
-    build-depends: QuickCheck, random
+        buildable:          False
+        ghc-options:        -Wall
+    hs-source-dirs:         src
+    main-is:                Tests.hs
+    build-depends:          QuickCheck, random
+
+executable compat-sexpr-test
+    if !flag(testing) || !flag(old-sexpr-compat)
+        buildable:          False
+        ghc-options:        -Wall
+    hs-source-dirs:         src
+    main-is:                CompatTests.hs
+    build-depends:          QuickCheck, random
 

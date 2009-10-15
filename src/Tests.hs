@@ -1,8 +1,8 @@
 module Main where
 
-import Codec.Sexpr
-import Codec.Sexpr.Parser
-import Codec.Sexpr.Printer
+import Text.SExpr
+import Text.SExpr.Parse
+import Text.SExpr.Print
 import Test.QuickCheck
 import Data.Monoid()
 import Text.Show.Functions()
@@ -22,7 +22,7 @@ import System.IO
 import Data.List
 
 prop_atoms :: Int -> Bool
-prop_atoms n = Just n == (unAtom $ atom n)
+prop_atoms n = Just n == (fromAtom $ atom n)
 
 prop_foldMap :: (Int -> [Int]) -> SExpr [] Int -> Bool
 prop_foldMap f s = T.foldMapDefault f s == F.foldMap f s
@@ -34,13 +34,13 @@ prop_fmap f s = T.fmapDefault f s == fmap f s
 -- prop_readshow s = (read . show $ s) == s
 -- 
 -- prop_readshowStr :: SExpr [] String -> Bool
--- prop_readshowStr s = (readSexprString $ advancedString s) == s
+-- prop_readshowStr s = (readSExprString $ advancedString s) == s
 
 prop_canonical_out :: SExpr [] String -> Bool
-prop_canonical_out s = (readSexprString $ canonicalString s) == s
+prop_canonical_out s = (readSExprString $ canonicalString s) == s
 
 prop_canonical_in :: SExpr [] String -> Bool
-prop_canonical_in s = (readCanonicalSexprString $ canonicalString s) == s
+prop_canonical_in s = (readCanonicalSExprString $ canonicalString s) == s
 
 prop_put_canonical :: SExpr [] String -> Bool
 prop_put_canonical s = 
@@ -51,19 +51,19 @@ prop_put_canonicalBS s =
     (L.unpack . runPut $ putCanonical s) == (canonicalString $ fmap B.unpack s)
 
 prop_atom_raw :: String -> Bool
-prop_atom_raw s = (readSexprString $ Codec.Sexpr.Printer.raw s "") == atom s
+prop_atom_raw s = (readSExprString $ Text.SExpr.Print.raw s "") == atom s
 
 prop_atom_token :: String -> Property
-prop_atom_token s = canToken s ==> ((readSexprString s) == atom s)
+prop_atom_token s = canToken s ==> ((readSExprString s) == atom s)
 
 prop_atom_hex :: String -> Property
-prop_atom_hex s = canHex s ==> ((readSexprString $ render $ hex s) == atom s)
+prop_atom_hex s = canHex s ==> ((readSExprString $ render $ hex s) == atom s)
 
 prop_atom_quote :: String -> Property
-prop_atom_quote s = canQuote s ==> ((readSexprString $ render $ quote s) == atom s)
+prop_atom_quote s = canQuote s ==> ((readSExprString $ render $ quote s) == atom s)
 
 prop_atom_base64 :: String -> Bool
-prop_atom_base64 s = (readSexprString $ render $ base64 s) == atom s 
+prop_atom_base64 s = (readSExprString $ render $ base64 s) == atom s 
 
 instance Arbitrary B.ByteString where
     arbitrary = B.pack `fmap` arbitrary
