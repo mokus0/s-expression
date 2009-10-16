@@ -127,10 +127,11 @@ showSExpr :: (Atom a, List l, Functor l) =>
      SExpr l a -> ShowS
 showSExpr = foldSExpr showsAtom showsList
 
+{-# INLINE showSExprAs #-}
 showSExprAs :: (Atom a2, List l2, Functor l2, Functor l1) =>
      (a1 -> a2) -> (forall t. l1 t -> l2 t)
      -> SExpr l1 a1 -> ShowS
-showSExprAs a l = showSExpr . foldSExpr (Atom . a) (List . l)
+showSExprAs a l = showSExpr . mapSExpr l a
 
 printSExpr :: (Atom a, List l, Functor l) =>
      SExpr l a -> Doc
@@ -139,7 +140,7 @@ printSExpr = foldSExpr printAtom printList
 printSExprAs :: (Atom a2, List l2, Functor l2, Functor l1) =>
      (a1 -> a2) -> (forall t. l1 t -> l2 t)
      -> SExpr l1 a1 -> Doc
-printSExprAs a l = printSExpr . foldSExpr (Atom . a) (List . l)
+printSExprAs a l = printSExpr . mapSExpr l a
 
 
 basic :: (Atom (Raw s)) => SExpr [] s -> Doc
@@ -175,7 +176,7 @@ putSExpr = foldSExpr putAtom putList
 putSExprAs :: (Atom a2, List l2, Functor l2, Functor l1) =>
      (a1 -> a2) -> (forall t. l1 t -> l2 t)
      -> SExpr l1 a1 -> Put
-putSExprAs a l = putSExpr . foldSExpr (Atom . a) (List . l)
+putSExprAs a l = putSExpr . mapSExpr l a
 
 
 putCanonical :: (Atom (Raw s)) => SExpr [] s -> Put

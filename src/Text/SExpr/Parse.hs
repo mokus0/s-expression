@@ -9,11 +9,12 @@ module Text.SExpr.Parse where
 import Text.SExpr.Type
 import Text.SExpr.Convert.Classes
 import Data.Char
-import Control.Applicative hiding ((<|>), many, optional)
+import Data.Bits
+import Control.Applicative ((<$>))
 import Control.Monad
-import Numeric (readOct, readDec, readHex)
 import qualified Codec.Binary.Base64.String as B64
 import Data.Maybe (catMaybes)
+import Data.List (foldl')
 
 import Text.Parsec
 
@@ -83,11 +84,11 @@ rawString = do
     <?> "raw string"
 
 -- <decimal>  	:: <decimal-digit>+ ;
+fromDec :: Num a => String -> a
+fromDec = foldl' (\x c -> x * 10 + fromIntegral (digitToInt c)) 0
+
 decimal :: Integral a => CharParser st a
-decimal = readIt <$> many1 digit <?> "decimal"
-    where readIt s = case readDec s of
-            [(n,"")] -> n
-            _ -> error "programming error: 'decimal' parser matched a non-decimal string"
+decimal = fromDec <$> many1 digit <?> "decimal"
 
 -- 		-- decimal numbers should have no unnecessary leading zeros
 -- <token>    	:: <tokenchar>+ ;
@@ -137,11 +138,7 @@ hexadecimalString = do
         pair [_] = error "programming error: in hexadecimal parser, an odd-length hex string was not rejected"
         pair (x:y:rest) = [x,y] : pair rest
         
-        readIt str = case readHex str of
-            [(x, "")] -> x
-            _ -> error "programming error: hexadecimal parser matched non-hex content"
-        
-        decoded = map (chr . readIt) (pair hexes)
+        decoded = map fromHex (pair hexes)
     
     case mbLen of
         Nothing -> return decoded
@@ -162,23 +159,32 @@ quotedStringBody len = between (char '"' <?> "start of quoted string") (char '"'
 
 -- Spec is not clear; should unescaped newlines be accepted or rejected?
 quotedStringContent :: Maybe Int -> CharParser st String
-quotedStringContent Nothing = catMaybes <$> many (quotedChar <|> Just <$> unquotedChar)
+quotedStringContent Nothing = catMaybes <$> many quotedChar
 quotedStringContent (Just len) = go len
     where
         go 0 = do
-            mbChar <- optionMaybe (quotedChar <?> "escaped newline")
+            mbChar <- optionMaybe (escapedChar <?> "escaped newline")
             case mbChar of
                 Nothing -> return []
                 Just Nothing -> go 0
                 Just (Just x)  -> unexpected [x]
         go n = do
-            mbChar <- quotedChar <|> Just <$> unquotedChar
+            mbChar <- quotedChar
             case mbChar of
                 Nothing -> go n
                 Just ch -> liftM (ch:) (go (n-1))
 
 quotedChar :: CharParser st (Maybe Char)
-quotedChar = (char '\\' >> anyChar >>= escaped) <?> "escaped character"
+quotedChar = escapedChar <|> Just <$> unescapedChar
+
+fromOct :: String -> Char
+fromOct = chr . foldl' (\x c -> x `shiftL` 3 + digitToInt c) 0
+
+fromHex :: String -> Char
+fromHex = chr . foldl' (\x c -> x `shiftL` 4 + digitToInt c) 0
+
+escapedChar :: CharParser st (Maybe Char)
+escapedChar = (char '\\' >> anyChar >>= escaped) <?> "escaped character"
     where
         escaped 'b'  = return $ Just '\b'
         escaped 't'  = return $ Just '\t'
@@ -191,14 +197,10 @@ quotedChar = (char '\\' >> anyChar >>= escaped) <?> "escaped character"
         escaped '\\' = return $ Just '\\'
         escaped x | x `elem` "0123" = do
             xs <- count 2 octDigit
-            case readOct (x:xs) of
-                [(y,"")] -> return (Just $ chr y)
-                _ -> error "programming error: quotedChar parser tried to read an invalid octal escape string"
+            return (Just (fromOct (x:xs)))
         escaped 'x' = do
             xs <- count 2 hexDigit
-            case readHex xs of
-                [(x,"")] -> return (Just $ chr x)
-                _ -> error "programming error: quotedChar parser tried to read an invalid hexadecimal escape string"
+            return (Just (fromHex xs))
         escaped '\r' = do
             optional (char '\n')
             return Nothing
@@ -207,8 +209,8 @@ quotedChar = (char '\\' >> anyChar >>= escaped) <?> "escaped character"
             return Nothing
         escaped other = fail ("unrecognized escape sequence \"\\" ++ other : "\"")
             
-unquotedChar :: CharParser st Char
-unquotedChar = noneOf "\"\\"
+unescapedChar :: CharParser st Char
+unescapedChar = noneOf "\"\\" <?> "quoted character"
 
 -- <list>     	:: "(" ( <sexp> | <whitespace> )* ")" ;
 sexprList :: CharParser st a -> CharParser st [a]

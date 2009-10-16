@@ -7,6 +7,7 @@ import Text.PrettyPrint
 import qualified Codec.Binary.Base64.String as B64
 import Data.Char (ord, intToDigit)
 import Numeric (showOct)
+import Data.List (intersperse)
 
 import Data.Binary
 import Data.Binary.Put
@@ -22,10 +23,26 @@ showsHinted :: (Atom h, Atom s) => Hinted h s -> ShowS
 showsHinted (Unhinted s) = showsAtom s
 showsHinted (Hinted h s) = showChar '[' . showsAtom h . showChar ']' . showsAtom s
 
+-- |Format a list with spaces for the advanced encoding
+showsSimpleList :: [ShowS] -> ShowS
+showsSimpleList = showParen True . foldl (.) id . intersperse (showChar ' ')
+
+-- |Format a list without spaces for the canonical encoding
+showsCanonicalList :: [ShowS] -> ShowS
+showsCanonicalList = showParen True . foldl (.) id
+
 -- |Format a hinted atom using the Atom instances for the hint and the atom.
 printHinted :: (Atom h, Atom s) => Hinted h s -> Doc
 printHinted (Unhinted s) = printAtom s
 printHinted (Hinted h s) = brackets (printAtom h) <> printAtom s
+
+-- |Format a list with spaces for the advanced encoding
+printSimpleList :: [Doc] -> Doc
+printSimpleList = parens . sep
+
+-- |Format a list without spaces for the canonical encoding
+printCanonicalList :: [Doc] -> Doc
+printCanonicalList = parens . cat
 
 -- |Format a string using the "raw" encoding
 raw :: String -> ShowS
@@ -171,3 +188,11 @@ putHinted (Hinted h s) = do
     putAtom h
     put ']'
     putAtom s
+
+putSimpleList xs = do
+    put '('
+    sequence_ (intersperse (put ' ') xs)
+    put ')'
+
+putCanonicalList :: [Put] -> Put
+putCanonicalList xs = put '(' >> sequence_ xs >> put ')'
