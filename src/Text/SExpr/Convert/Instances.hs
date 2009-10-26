@@ -25,7 +25,9 @@ instance (Atom h, Atom s) => Atom (Hinted h s) where
     putAtom   = putHinted
     parseAtom = hintedAtom
 
--- |Raw strings for the canonical and basic encodings
+-- |Raw strings for the canonical and basic encodings.  This is a newtype
+-- wrapper used internally to select the appropriate 'Atom' instance to use when
+-- formatting or parsing an s-expression.
 newtype Raw s = Raw { fromRaw :: s }
 instance Atom (Raw String) where
     showsAtom = raw    . fromRaw
@@ -51,8 +53,10 @@ instance (Atom (Raw h), Atom (Raw s)) => Atom (Raw (Hinted h s)) where
     putAtom   = putAtom   . mapHint Raw Raw . fromRaw
     parseAtom = Raw . mapHint fromRaw fromRaw <$> parseAtom
 
--- | \<simple-string\>s in the \"advanced\" encoding.  No formatting information is
--- retained when parsing.
+-- | \<simple-string\>s in the \"advanced\" encoding.  No formatting 
+-- information is retained when parsing.  This is a newtype wrapper
+-- used internally to select the appropriate 'Atom' instance to use
+-- when formatting or parsing an s-expression.
 newtype Simple s = Simple { fromSimple :: s }
 instance Atom (Simple String) where
     printAtom = format . fromSimple
@@ -84,6 +88,9 @@ instance List [] where
     putList   = putSimpleList
     parseList = sexprList
 
+-- |Lists in the \"canonical\" encoding.  This is a newtype wrapper
+-- used internally to select the appropriate 'List' instance to use
+-- when formatting or parsing an s-expression.
 newtype Canonical a = Canonical {fromCanonical :: [a]}
     deriving (Functor)
 instance List Canonical where
