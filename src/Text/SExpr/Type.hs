@@ -15,7 +15,6 @@ import Data.Traversable (Traversable, sequenceA, traverse)
 import Data.Generics (Data, Typeable, Typeable1(..), mkTyCon, mkTyConApp)
 import Test.QuickCheck (Arbitrary(..), variant, choose, oneof, sized, resize, frequency)
 import Data.Char (ord, isAlpha, isAlphaNum, isSpace)
-import Unsafe.Coerce {- for rewrite rules only -}
 
 -- |An s-expression consists of atoms and lists of s-expressions.  The atom type 
 -- and the list type are given as parameters here, because there are many useful
@@ -134,38 +133,28 @@ matchSExpr _ l (List xs) = l xs
 -- |Simultaneously map over the lists and the atoms of an s-expression without
 -- changing its basic structure.
 {-# RULES
-"mapSExpr/id/_"     mapSExpr id = lmap
+-- lots of identities, intended to fuse multiple traversals.
+
+-- simplifying identity traversals (rules for fmap and lmap may
+-- then further simplify in case of identity in both parameters):
+"mapSExpr/id/_"               mapSExpr id   = lmap
 "mapSExpr/_/id"     forall f. mapSExpr f id = fmap f
 
-"mapSExpr/unsafeCoerce/_"     forall f. mapSExpr unsafeCoerce f = unsafeCoerce . lmap f
-"mapSExpr/_/unsafeCoerce"     forall f. mapSExpr f unsafeCoerce = unsafeCoerce . fmap f
+-- Absorbing 'lmap's:
+"mapSExpr.lmap"     forall f g h.   mapSExpr f g . lmap h    = mapSExpr f (g.h)
+"mapSExpr.lmap"     forall f g h x. mapSExpr f g  (lmap h x) = mapSExpr f (g.h) x
+"lmap.mapSExpr"     forall f g h.   lmap g . mapSExpr f h    = mapSExpr f (g.h)
+"lmap.mapSExpr"     forall f g h x. lmap g  (mapSExpr f h x) = mapSExpr f (g.h) x
 
-"mapSExpr.lmap"     forall f g h.
-                        mapSExpr f g . lmap h = mapSExpr f (g.h)
-"mapSExpr.lmap"     forall f g h x.
-                        mapSExpr f g (lmap h x) = mapSExpr f (g.h) x
-"lmap.mapSExpr"     forall f g h.
-                         lmap g . mapSExpr f h = mapSExpr f (g.h)
-"lmap.mapSExpr"     forall f g h x.
-                         lmap g (mapSExpr f h x) = mapSExpr f (g.h) x
+-- Absorbing 'fmap's:
+"mapSExpr.fmap"     forall f g h.   mapSExpr f g . fmap h    = mapSExpr (f.h) g
+"mapSExpr.fmap"     forall f g h x. mapSExpr f g  (fmap h x) = mapSExpr (f.h) g x
+"fmap.mapSExpr"     forall f g h.   fmap f . mapSExpr g h    = mapSExpr (f.g) h
+"fmap.mapSExpr"     forall f g h x. fmap f  (mapSExpr g h x) = mapSExpr (f.g) h x
 
-"mapSExpr.fmap"     forall f g h.
-                        mapSExpr f g . fmap h = mapSExpr (f.h) g
-"mapSExpr.fmap"     forall f g h x.
-                        mapSExpr f g (fmap h x) = mapSExpr (f.h) g x
-"fmap.mapSExpr"     forall f g h.
-                         fmap f . mapSExpr g h = mapSExpr (f.g) h
-"fmap.mapSExpr"     forall f g h x.
-                         fmap f (mapSExpr g h x) = mapSExpr (f.g) h x
-
-"mapSExpr.mapSExpr" forall f1 g1 f2 g2.
-                        mapSExpr f1 g1 . mapSExpr f2 g2 = mapSExpr (f1 . f2) (g1 . g2)
-"mapSExpr.mapSExpr" forall f1 g1 f2 g2 x.
-                        mapSExpr f1 g1 (mapSExpr f2 g2 x) = mapSExpr (f1 . f2) (g1 . g2) x
-
-"fmap.lmap"     [~2]forall f g . mapSExpr f g = lmap g . fmap f
-"fmap.lmap"     [2] forall f g . fmap f . lmap g = mapSExpr f g
-"lmap.fmap"     [2] forall f g . lmap g . fmap f = mapSExpr f g
+-- Fusing double 'mapSExpr's:
+"mapSExpr.mapSExpr" forall f1 g1 f2 g2.   mapSExpr f1 g1 . mapSExpr f2 g2    = mapSExpr (f1 . f2) (g1 . g2)
+"mapSExpr.mapSExpr" forall f1 g1 f2 g2 x. mapSExpr f1 g1  (mapSExpr f2 g2 x) = mapSExpr (f1 . f2) (g1 . g2) x
   #-}
 {-# NOINLINE mapSExpr #-}
 mapSExpr :: Functor l1 => (a1 -> a2) -> (l1 (SExpr l2 a2) -> l2 (SExpr l2 a2)) -> SExpr l1 a1 -> SExpr l2 a2
@@ -192,20 +181,17 @@ mapSExpr f g (List xs) = List (g (fmap (mapSExpr f g) xs))
 -- > 
 -- > sexprToObject x = foldSExpr Scalar toObj (list [x])
 {-# RULES
-"foldSExpr/fmap"    forall l a f. 
-        foldSExpr l a . fmap f = foldSExpr (l . f) a
-"foldSExpr/fmap"    forall l a f x. 
-        foldSExpr l a (fmap f x) = foldSExpr (l . f) a x
+-- Absorbing 'fmap's:
+"foldSExpr/fmap"    forall l a f.   foldSExpr l a . fmap f    = foldSExpr (l . f) a
+"foldSExpr/fmap"    forall l a f x. foldSExpr l a  (fmap f x) = foldSExpr (l . f) a x
 
-"foldSExpr/lmap"    forall l a f. 
-        foldSExpr l a . lmap f = foldSExpr l (a . f)
-"foldSExpr/lmap"    forall l a f x. 
-        foldSExpr l a (lmap f x) = foldSExpr l (a . f) x
+-- Absorbing 'lmap's:
+"foldSExpr/lmap"    forall l a f.   foldSExpr l a . lmap f    = foldSExpr l (a . f)
+"foldSExpr/lmap"    forall l a f x. foldSExpr l a  (lmap f x) = foldSExpr l (a . f) x
 
-"foldSExpr/mapSExpr"    forall l a f g. 
-        foldSExpr l a . mapSExpr f g = foldSExpr (l . f) (a . g)
-"foldSExpr/mapSExpr"    forall l a f g x. 
-        foldSExpr l a (mapSExpr f g x) = foldSExpr (l . f) (a . g) x
+-- Absorbing 'mapSExpr's:
+"foldSExpr/mapSExpr"    forall l a f g.   foldSExpr l a . mapSExpr f g    = foldSExpr (l . f) (a . g)
+"foldSExpr/mapSExpr"    forall l a f g x. foldSExpr l a  (mapSExpr f g x) = foldSExpr (l . f) (a . g) x
   #-}
 {-# NOINLINE foldSExpr #-}
 foldSExpr :: (Functor l) => (a -> b) -> (l b -> b) -> SExpr l a -> b
@@ -223,14 +209,13 @@ foldSExprBy fm a l = go
 
 -- |systematically replace the list structures in an s-expression
 {-# RULES
+-- Eliminating identity traversals:
 "lmap/id"       lmap id = id
 
-"lmap/unsafeCoerce"       lmap unsafeCoerce = unsafeCoerce
+-- Combining multiple 'lmap' traversals:
+"lmap.lmap"     forall f g.   lmap f . lmap g    = lmap (f.g)
+"lmap.lmap"     forall f g x. lmap f  (lmap g x) = lmap (f.g) x
 
-"lmap.lmap"     forall f g. lmap f . lmap g = lmap (f.g)
-"lmap.lmap"     forall f g x. lmap f (lmap g x) = lmap (f.g) x
-
-"lmap.fmap" [~2]forall f g. fmap g . lmap f = lmap f . fmap g
   #-}
 lmap :: Functor l1 => (l1 (SExpr l2 a) -> l2 (SExpr l2 a)) -> SExpr l1 a -> SExpr l2 a
 lmap f = foldSExpr Atom (List . f)
@@ -239,7 +224,10 @@ lmap f = foldSExpr Atom (List . f)
 -- natural transformation from one list to the other (ie., the mapping does not
 -- depend in any way on the contents of each list)
 {-# RULES
-"lmap: weakening"           forall (f :: forall t. l1 t -> l2 t) . lmapNat f = lmap f
+-- after it passes initial typechecking, 'lmapNat' is identical to 'lmap'.  To
+-- simplify RULES processing, replace it with 'lmap' (weakening the type) so
+-- that all 'lmap' rules apply.
+"lmap: weakening"   forall (f :: forall t. l1 t -> l2 t) . lmapNat f = lmap f
   #-}
 lmapNat :: Functor l1 => (forall t. l1 t -> l2 t) -> SExpr l1 a -> SExpr l2 a
 lmapNat f = foldSExpr Atom (List . f)
@@ -253,14 +241,24 @@ data Hinted h a
     deriving (Eq, Ord, Show, Typeable, Data)
 
 {-# RULES
-"fromHinted/hinted"     forall h x. fromHinted (hinted h x) = (Just h,  x)
-"fromHinted/unhinted"   forall   x. fromHinted (unhinted x) = (Nothing, x)
-"hint/hinted"           forall h x. hint (hinted h x) = h
-"hint/unhinted"         forall   x. hint (unhinted x) = defaultHint
-"hint/hinted"           forall d h x. hintWithDefault d (hinted h x) = h
-"hint/unhinted"         forall d   x. hintWithDefault d (unhinted x) = d
-"dropHint/hinted"       forall h x. dropHint (hinted h x) = x
-"dropHint/unhinted"     forall   x. dropHint (unhinted x) = x
+-- Simplify identities:
+"fromHinted.hinted"     forall h x. fromHinted (hinted h x) = (Just h,  x)
+"fromHinted.unhinted"   forall   x. fromHinted (unhinted x) = (Nothing, x)
+
+"hint.hinted"           forall h x. hint  (hinted h x) = h
+"hint.hinted"           forall h.   hint . hinted h    = const h
+"hint.unhinted"         forall   x. hint  (unhinted x) = defaultHint
+"hint.unhinted"                     hint . unhinted    = const defaultHint
+
+"hint.hinted"           forall d h x. hintWithDefault d  (hinted h x) = h
+"hint.hinted"           forall d h.   hintWithDefault d . hinted h    = const h
+"hint.unhinted"         forall d   x. hintWithDefault d  (unhinted x) = d
+"hint.unhinted"         forall d.     hintWithDefault d . unhinted    = const d
+
+"dropHint.hinted"       forall h x. dropHint  (hinted h x) = x
+"dropHint.hinted"       forall h.   dropHint . hinted h    = id
+"dropHint.unhinted"     forall   x. dropHint  (unhinted x) = x
+"dropHint.unhinted"                 dropHint . unhinted    = id
   #-}
 
 -- |Construct a hinted atom with a MIME type hint.
@@ -335,8 +333,8 @@ dropHint (Unhinted x) = x
 -- |Alter the hint and content of a 'Hinted' value.
 -- @mapHint f g@ applies @f@ to the hint and @g@ to the value.
 {-# RULES
+-- simplify identity traversals:
 "mapHint/id"    mapHint id = fmap
-"mapHint/unsafeCoerce"    mapHint unsafeCoerce = \f -> fmap f . unsafeCoerce
   #-}
 mapHint :: (a -> x) -> (b -> y) -> Hinted a b -> Hinted x y
 mapHint f g (Hinted h x) = Hinted (f h) (g x)

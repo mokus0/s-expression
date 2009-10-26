@@ -45,7 +45,7 @@ executable sexpr-test
     build-depends:          QuickCheck, random
 
 executable compat-sexpr-test
-    if !flag(testing) || !flag(old-sexpr-compat)
+    if !(flag(testing) && flag(old-sexpr-compat))
         buildable:          False
         ghc-options:        -Wall
     hs-source-dirs:         src
