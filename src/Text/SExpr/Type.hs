@@ -133,34 +133,44 @@ matchSExpr _ l (List xs) = l xs
 
 -- |Simultaneously map over the lists and the atoms of an s-expression without
 -- changing its basic structure.
-{-# RULES 
-"mapSExpr/id/_"     mapSExpr id = fmap
-"mapSExpr/id/_"     forall f. mapSExpr unsafeCoerce f = unsafeCoerce . fmap f
-"mapSExpr/_/id"     forall f. mapSExpr f id = lmap f
-"mapSExpr/_/id"     forall f. mapSExpr f unsafeCoerce = unsafeCoerce . lmap f
+{-# RULES
+"mapSExpr/id/_"     mapSExpr id = lmap
+"mapSExpr/_/id"     forall f. mapSExpr f id = fmap f
 
-"mapSExpr.fmap"     forall f g h.
-                        mapSExpr f g . fmap h = mapSExpr f (g.h)
-"fmap.mapSExpr"     forall f g h.
-                         fmap g . mapSExpr f h = mapSExpr f (g.h)
+"mapSExpr/unsafeCoerce/_"     forall f. mapSExpr unsafeCoerce f = unsafeCoerce . lmap f
+"mapSExpr/_/unsafeCoerce"     forall f. mapSExpr f unsafeCoerce = unsafeCoerce . fmap f
 
 "mapSExpr.lmap"     forall f g h.
-                        mapSExpr f g . lmap h = mapSExpr (f.h) g
+                        mapSExpr f g . lmap h = mapSExpr f (g.h)
+"mapSExpr.lmap"     forall f g h x.
+                        mapSExpr f g (lmap h x) = mapSExpr f (g.h) x
 "lmap.mapSExpr"     forall f g h.
-                         lmap f . mapSExpr g h = mapSExpr (f.g) h
+                         lmap g . mapSExpr f h = mapSExpr f (g.h)
+"lmap.mapSExpr"     forall f g h x.
+                         lmap g (mapSExpr f h x) = mapSExpr f (g.h) x
+
+"mapSExpr.fmap"     forall f g h.
+                        mapSExpr f g . fmap h = mapSExpr (f.h) g
+"mapSExpr.fmap"     forall f g h x.
+                        mapSExpr f g (fmap h x) = mapSExpr (f.h) g x
+"fmap.mapSExpr"     forall f g h.
+                         fmap f . mapSExpr g h = mapSExpr (f.g) h
+"fmap.mapSExpr"     forall f g h x.
+                         fmap f (mapSExpr g h x) = mapSExpr (f.g) h x
 
 "mapSExpr.mapSExpr" forall f1 g1 f2 g2.
                         mapSExpr f1 g1 . mapSExpr f2 g2 = mapSExpr (f1 . f2) (g1 . g2)
 "mapSExpr.mapSExpr" forall f1 g1 f2 g2 x.
                         mapSExpr f1 g1 (mapSExpr f2 g2 x) = mapSExpr (f1 . f2) (g1 . g2) x
 
-"fmap.lmap"     [~2]forall f g . mapSExpr f g = lmap f . fmap g
-"fmap.lmap"     [2] forall f g . fmap g . lmap f = mapSExpr f g
-"lmap.fmap"     [2] forall f g . lmap f . fmap g = mapSExpr f g
+"fmap.lmap"     [~2]forall f g . mapSExpr f g = lmap g . fmap f
+"fmap.lmap"     [2] forall f g . fmap f . lmap g = mapSExpr f g
+"lmap.fmap"     [2] forall f g . lmap g . fmap f = mapSExpr f g
   #-}
-mapSExpr :: Functor l1 => (l1 (SExpr l2 a2) -> l2 (SExpr l2 a2)) -> (a1 -> a2) -> SExpr l1 a1 -> SExpr l2 a2
-mapSExpr f g (List xs) = List (f (fmap (mapSExpr f g) xs))
-mapSExpr _ g (Atom  x) = Atom (g x)
+{-# NOINLINE mapSExpr #-}
+mapSExpr :: Functor l1 => (a1 -> a2) -> (l1 (SExpr l2 a2) -> l2 (SExpr l2 a2)) -> SExpr l1 a1 -> SExpr l2 a2
+mapSExpr f _ (Atom  x) = Atom (f x)
+mapSExpr f g (List xs) = List (g (fmap (mapSExpr f g) xs))
 
 -- |Fold an s-expression; ie, substitute the given functions for each of
 -- the data constructors.  For example, using types from the data-object 
@@ -181,6 +191,23 @@ mapSExpr _ g (Atom  x) = Atom (g x)
 -- >          | otherwise       = Sequence xs
 -- > 
 -- > sexprToObject x = foldSExpr Scalar toObj (list [x])
+{-# RULES
+"foldSExpr/fmap"    forall l a f. 
+        foldSExpr l a . fmap f = foldSExpr (l . f) a
+"foldSExpr/fmap"    forall l a f x. 
+        foldSExpr l a (fmap f x) = foldSExpr (l . f) a x
+
+"foldSExpr/lmap"    forall l a f. 
+        foldSExpr l a . lmap f = foldSExpr l (a . f)
+"foldSExpr/lmap"    forall l a f x. 
+        foldSExpr l a (lmap f x) = foldSExpr l (a . f) x
+
+"foldSExpr/mapSExpr"    forall l a f g. 
+        foldSExpr l a . mapSExpr f g = foldSExpr (l . f) (a . g)
+"foldSExpr/mapSExpr"    forall l a f g x. 
+        foldSExpr l a (mapSExpr f g x) = foldSExpr (l . f) (a . g) x
+  #-}
+{-# NOINLINE foldSExpr #-}
 foldSExpr :: (Functor l) => (a -> b) -> (l b -> b) -> SExpr l a -> b
 foldSExpr = foldSExprBy fmap
 
@@ -197,7 +224,8 @@ foldSExprBy fm a l = go
 -- |systematically replace the list structures in an s-expression
 {-# RULES
 "lmap/id"       lmap id = id
-"lmap/id"       lmap unsafeCoerce = unsafeCoerce
+
+"lmap/unsafeCoerce"       lmap unsafeCoerce = unsafeCoerce
 
 "lmap.lmap"     forall f g. lmap f . lmap g = lmap (f.g)
 "lmap.lmap"     forall f g x. lmap f (lmap g x) = lmap (f.g) x
@@ -229,6 +257,8 @@ data Hinted h a
 "fromHinted/unhinted"   forall   x. fromHinted (unhinted x) = (Nothing, x)
 "hint/hinted"           forall h x. hint (hinted h x) = h
 "hint/unhinted"         forall   x. hint (unhinted x) = defaultHint
+"hint/hinted"           forall d h x. hintWithDefault d (hinted h x) = h
+"hint/unhinted"         forall d   x. hintWithDefault d (unhinted x) = d
 "dropHint/hinted"       forall h x. dropHint (hinted h x) = x
 "dropHint/unhinted"     forall   x. dropHint (unhinted x) = x
   #-}
@@ -306,7 +336,7 @@ dropHint (Unhinted x) = x
 -- @mapHint f g@ applies @f@ to the hint and @g@ to the value.
 {-# RULES
 "mapHint/id"    mapHint id = fmap
-"mapHint/id"    mapHint unsafeCoerce = \f -> fmap f . unsafeCoerce
+"mapHint/unsafeCoerce"    mapHint unsafeCoerce = \f -> fmap f . unsafeCoerce
   #-}
 mapHint :: (a -> x) -> (b -> y) -> Hinted a b -> Hinted x y
 mapHint f g (Hinted h x) = Hinted (f h) (g x)

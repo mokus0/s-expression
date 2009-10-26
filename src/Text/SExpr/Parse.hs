@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, RankNTypes, FlexibleContexts #-}
+{-# LANGUAGE CPP, RankNTypes, FlexibleContexts, ScopedTypeVariables #-}
 
 -- |This module defines the parts of the S-expression grammar
 -- necessary to construct a complete parser, but does not actually construct
@@ -25,10 +25,15 @@ import Text.Parsec
 -- <simple-string>	:: <raw> ;
 -- <string>   	:: <display>? <simple-string> ;
 
-sexpr :: (Atom a, List l) => CharParser st (SExpr l a)
-sexpr = (Atom <$> parseAtom) 
-    <|> (List <$> parseList sexpr)
-    <|> basicTransport sexpr
+sexpr :: CharParser () a 
+      -> (CharParser () (SExpr l a) -> CharParser () (l (SExpr l a)))
+      -> CharParser () (SExpr l a)
+sexpr (atom :: CharParser () a) (list :: CharParser () (SExpr l a) -> CharParser () (l (SExpr l a))) = self
+    where 
+        self :: CharParser () (SExpr l a)
+        self =  (Atom <$> atom) 
+            <|> (List <$> list self)
+            <|> basicTransport self
 
 basicTransport :: CharParser () x -> CharParser st x
 basicTransport sexp = between (char '{' >> whitespace) (char '}') $ do

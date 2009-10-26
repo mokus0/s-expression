@@ -47,9 +47,9 @@ import Text.PrettyPrint (Doc, render, braces, text)
 -- Public convenience functions: Parsers --
 -------------------------------------------
 
-parseSExpr :: (Atom a, List l) => CharParser st (SExpr l a)
+parseSExpr :: (Atom a, List l) => CharParser () (SExpr l a)
 parseSExpr = do
-    s <- sexpr
+    s <- sexpr parseAtom parseList
     eof
     return s
 
@@ -57,8 +57,11 @@ parseSExprAs
   :: (Functor l1, Atom a1, List l1) =>
      (a1 -> a2)
      -> (l1 (SExpr l2 a2) -> l2 (SExpr l2 a2))
-     -> CharParser st (SExpr l2 a2)
-parseSExprAs a l = foldSExpr (Atom . a) (List . l) <$> parseSExpr
+     -> CharParser () (SExpr l2 a2)
+parseSExprAs a l = do
+    s <- sexpr (a <$> parseAtom) (\s -> l <$> parseList s)
+    eof
+    return s
 
 readsSExpr :: (Atom a, List l) => ReadS (SExpr l a)
 readsSExpr str = case runParser parse () "<readSExpr>" str of
@@ -66,7 +69,7 @@ readsSExpr str = case runParser parse () "<readSExpr>" str of
     Right x     -> [x]
     where 
         parse = do
-            s <- sexpr
+            s <- sexpr parseAtom parseList
             optional (char '\NUL')
             rest <- many anyChar
             return (s, rest)
@@ -76,19 +79,27 @@ readsSExprAs
      (a1 -> a2)
      -> (l1 (SExpr l2 a2) -> l2 (SExpr l2 a2))
      -> ReadS (SExpr l2 a2)
-readsSExprAs a l str = [(foldSExpr (Atom . a) (List . l) x, rest) | (x,rest) <- readsSExpr str]
+readsSExprAs a l str = case runParser parse () "<readSExprAs>" str of
+    Left _err   -> []
+    Right x     -> [x]
+    where 
+        parse = do
+            s <- sexpr (a <$> parseAtom) (\s -> l <$> parseList s)
+            optional (char '\NUL')
+            rest <- many anyChar
+            return (s, rest)
 
 
-canonicalSExpr :: (Atom (Raw s)) => CharParser st (SExpr [] s)
+canonicalSExpr :: (Atom (Raw s)) => CharParser () (SExpr [] s)
 canonicalSExpr = parseSExprAs fromRaw fromCanonical
 
-advancedSExpr :: (Atom (Simple s)) => CharParser st (SExpr [] s)
+advancedSExpr :: (Atom (Simple s)) => CharParser () (SExpr [] s)
 advancedSExpr = parseSExprAs fromSimple id
 
---  I prefer the derived instance, for consistency and for transparency
---  (that is, when I work with 'SExpr's in GHCi I prefer to see their 
---  haskelly algebraic structure, not their lispy rendered form), but
---  this is possible too:
+--  I prefer the derived 'Show' instance, for consistency and for 
+--  transparency (that is, when I work with 'SExpr's in GHCi I prefer
+--  to see their haskelly algebraic structure, not their lispy rendered 
+--  form), but this is possible too:
 --
 -- instance (Atom (Simple a), 
 --           List l, Functor l) => 
@@ -127,11 +138,10 @@ showSExpr :: (Atom a, List l, Functor l) =>
      SExpr l a -> ShowS
 showSExpr = foldSExpr showsAtom showsList
 
-{-# INLINE showSExprAs #-}
 showSExprAs :: (Atom a2, List l2, Functor l2, Functor l1) =>
      (a1 -> a2) -> (forall t. l1 t -> l2 t)
      -> SExpr l1 a1 -> ShowS
-showSExprAs a l = showSExpr . mapSExpr l a
+showSExprAs a l = foldSExpr (showsAtom . a) (showsList . l)
 
 printSExpr :: (Atom a, List l, Functor l) =>
      SExpr l a -> Doc
@@ -140,7 +150,7 @@ printSExpr = foldSExpr printAtom printList
 printSExprAs :: (Atom a2, List l2, Functor l2, Functor l1) =>
      (a1 -> a2) -> (forall t. l1 t -> l2 t)
      -> SExpr l1 a1 -> Doc
-printSExprAs a l = printSExpr . mapSExpr l a
+printSExprAs a l = foldSExpr (printAtom . a) (printList . l)
 
 
 basic :: (Atom (Raw s)) => SExpr [] s -> Doc
@@ -176,7 +186,7 @@ putSExpr = foldSExpr putAtom putList
 putSExprAs :: (Atom a2, List l2, Functor l2, Functor l1) =>
      (a1 -> a2) -> (forall t. l1 t -> l2 t)
      -> SExpr l1 a1 -> Put
-putSExprAs a l = putSExpr . mapSExpr l a
+putSExprAs a l = foldSExpr (putAtom . a) (putList . l)
 
 
 putCanonical :: (Atom (Raw s)) => SExpr [] s -> Put

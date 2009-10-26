@@ -24,9 +24,11 @@ import Unsafe.Coerce {- for rewrite rules only -}
 -- ensure that fmap rewrites apply to <$> and map too
 "INLINE <$>" (<$>) = fmap
 
--- various unsafeCoerce rules
-"unsafeCoerce.unsafeCoerce"     unsafeCoerce . unsafeCoerce = unsafeCoerce
-"unsafeCoerce.unsafeCoerce"     forall x . unsafeCoerce (unsafeCoerce x) = unsafeCoerce x
+-- various unsafeCoerce rules, triggered indirectly through rules for newtype constructors
+-- (purpose is to eliminate unnecessary traversals where possible, caused by fmap-ing
+-- newtype constructors)
+"unsafeCoerce.unsafeCoerce/1"   unsafeCoerce . unsafeCoerce = unsafeCoerce
+"unsafeCoerce.unsafeCoerce/2"   forall x . unsafeCoerce (unsafeCoerce x) = unsafeCoerce x
 "fmap/unsafeCoerce"             fmap unsafeCoerce = unsafeCoerce
 "map/unsafeCoerce"              map  unsafeCoerce = unsafeCoerce
 "fmap.unsafeCoerce"             forall f. fmap f . unsafeCoerce = fmap (f . unsafeCoerce)

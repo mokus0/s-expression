@@ -1,5 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleContexts, UndecidableInstances #-}
--- |A Sexpr is an S-expressionin the style of Rivest's Canonical
+-- |A Sexpr is an S-expression in the style of Rivest's Canonical
 -- S-expressions.  Atoms may be of any type, but String and
 -- ByteString have special support.  Rivest's implementation of
 -- S-expressions is unusual in supporting MIME type hints for each
