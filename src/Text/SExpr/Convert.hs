@@ -50,6 +50,7 @@ import Text.PrettyPrint (Doc, render, braces, text)
 parseSExpr :: (Atom a, List l) => CharParser () (SExpr l a)
 parseSExpr = do
     s <- sexpr parseAtom parseList
+    whitespace
     eof
     return s
 
@@ -60,6 +61,7 @@ parseSExprAs
      -> CharParser () (SExpr l2 a2)
 parseSExprAs a l = do
     s <- sexpr (a <$> parseAtom) (\s -> l <$> parseList s)
+    whitespace
     eof
     return s
 
