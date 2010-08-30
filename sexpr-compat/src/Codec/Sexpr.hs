@@ -1,4 +1,3 @@
-{-# LANGUAGE ViewPatterns #-}
 -- |A Sexpr is an S-expression in the style of Rivest's Canonical
 -- S-expressions.  Atoms may be of any type, but String and
 -- ByteString have special support.  Rivest's implementation of
@@ -68,8 +67,9 @@ instance Arbitrary a => Arbitrary (Sexpr a) where
         where 
             arbList sz  = map unSexpr <$> resize (sz `div` 2) arbitrary
               
-    coarbitrary (Sexpr (S.fromAtom -> Just a)) = variant 0 . coarbHintedString a
-    coarbitrary (Sexpr (S.fromList -> Just l)) = variant 1 . coarbitrary (map Sexpr l)
+    coarbitrary (Sexpr s)
+        | S.isAtom s    = variant 0 . coarbHintedString (S.unAtom s)
+        | otherwise     = variant 1 . coarbitrary (map Sexpr (S.unList s))
 
 arbHintedString :: Arbitrary a => Gen (Hinted String a)
 arbHintedString = oneof [arbHinted, arbUnhinted]
@@ -88,11 +88,10 @@ arbHintedString = oneof [arbHinted, arbUnhinted]
             return (S.hinted h x)
         arbUnhinted = S.unhinted <$> arbitrary
 
-coarbHintedString (S.fromHinted -> (Nothing, x)) = variant 0 . coarbitrary x
-coarbHintedString (S.fromHinted -> (Just h,  x)) = variant 1 . coarbitrary x . coarbitrary_h
-    where 
-        coarbitrary_h = foldr (\a b -> variant (ord a) . variant 1 . b) (variant 0) h
-
+coarbHintedString s = case S.fromHinted s of
+    (Nothing, x) -> variant 0 . coarbitrary x
+    (Just h,  x) -> let coarbitrary_h = foldr (\a b -> variant (ord a) . variant 1 . b) (variant 0) h
+                     in variant 1 . coarbitrary x . coarbitrary_h
 
 instance Functor Sexpr where
     fmap f (Sexpr s) = Sexpr (fmap (fmap f) s)
@@ -150,8 +149,9 @@ hint = fmap S.hint . S.fromAtom . unSexpr
 -- to the root.  @f@ need not preserve the shape of @s@, in contrast
 -- to the shape-preserving @Traversable@ instance.
 fold :: (Sexpr t -> Sexpr t) -> Sexpr t -> Sexpr t
-fold f z@(Sexpr (S.fromAtom -> Just  _)) = f z
-fold f   (Sexpr (S.fromList -> Just ss)) = f . list $ map (fold f . Sexpr) ss
+fold f z@(Sexpr s)
+    | S.isAtom s    = f z
+    | otherwise     = f . list $ map (fold f . Sexpr) (S.unList s)
 
 canonicalString :: Sexpr String -> String
 canonicalString (Sexpr s) = S.canonicalString s
