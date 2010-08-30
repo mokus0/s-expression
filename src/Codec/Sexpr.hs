@@ -1,4 +1,3 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleContexts, UndecidableInstances #-}
 -- |A Sexpr is an S-expression in the style of Rivest's Canonical
 -- S-expressions.  Atoms may be of any type, but String and
 -- ByteString have special support.  Rivest's implementation of
@@ -48,9 +47,11 @@ import qualified Text.SExpr.Type as S
 import qualified Text.SExpr.Convert as S
 
 import Control.Applicative ((<$>))
+import Control.Monad    (replicateM)
+import Data.Char        (ord)
 import Data.Traversable (Traversable(sequenceA, traverse))
 import Data.Foldable    (Foldable(foldMap))
-import Test.QuickCheck  (Arbitrary)
+import Test.QuickCheck  (Arbitrary(..), Gen, variant, choose, oneof, sized, resize, frequency)
 
 import Text.ParserCombinators.ReadP (ReadP, readS_to_P)
 import Data.ByteString (ByteString)
@@ -58,7 +59,39 @@ import Text.PrettyPrint (Doc)
 import Data.Binary (Put)
 
 newtype Sexpr a = Sexpr { unSexpr :: (SExpr [] (Hinted String a)) }
-    deriving (Eq, Arbitrary)
+    deriving Eq
+
+instance Arbitrary a => Arbitrary (Sexpr a) where
+    arbitrary = oneof [(Sexpr . Atom) <$> arbHintedString,
+                       (Sexpr . List) <$> sized arbList]
+        where 
+            arbList sz  = map unSexpr <$> resize (sz `div` 2) arbitrary
+              
+    coarbitrary (Sexpr (Atom a)) = variant 0 . coarbHintedString a
+    coarbitrary (Sexpr (List l)) = variant 1 . coarbitrary (map Sexpr l)
+
+arbHintedString :: Arbitrary a => Gen (Hinted String a)
+arbHintedString = oneof [arbHinted, arbUnhinted]
+    where 
+        arbHintChar = frequency 
+            [ (26, choose ('a','z'))
+            , (26, choose ('A','Z'))
+            , (10, choose ('0','9'))
+            , (1,  return ' ')
+            ]
+        arbHint = sized $ \sz -> replicateM sz arbHintChar
+        arbHinted = sized $ \sz -> do
+            hsz <- choose (0,sz)
+            h <- resize hsz arbHint
+            x <- resize (sz - hsz) arbitrary
+            return (Hinted h x)
+        arbUnhinted = Unhinted <$> arbitrary
+
+coarbHintedString (Unhinted x) = variant 0 . coarbitrary x
+coarbHintedString (Hinted h x) = variant 1 . coarbitrary x . coarbitrary_h
+    where 
+        coarbitrary_h = foldr (\a b -> variant (ord a) . variant 1 . b) (variant 0) h
+
 
 instance Functor Sexpr where
     fmap f (Sexpr s) = Sexpr (fmap (fmap f) s)

@@ -1,8 +1,10 @@
+{-# LANGUAGE FlexibleInstances, UndecidableInstances #-}
 module Main where
 
 import Text.SExpr
 import Text.SExpr.Parse
 import Text.SExpr.Print
+import Text.SExpr.Type (SExpr(..), Hinted(..))
 import Test.QuickCheck
 import Data.Monoid()
 import Text.Show.Functions()
@@ -15,11 +17,43 @@ import qualified Data.ByteString.Lazy.Char8 as L
 import Text.PrettyPrint (render)
 
 import Text.Printf
+import Control.Applicative
 import Control.Monad
 import System.Environment
 import System.Random
 import System.IO
 import Data.List
+
+instance (Arbitrary a, Arbitrary (l (SExpr l a))) => Arbitrary (SExpr l a) where
+    arbitrary = oneof [Atom <$> arbitrary,
+                       List <$> sized arbList]
+        where 
+            arbList sz  = resize (sz `div` 2) arbitrary
+              
+    coarbitrary (Atom a) = variant 0 . coarbitrary a
+    coarbitrary (List l) = variant 1 . coarbitrary l
+
+instance Arbitrary a => Arbitrary (Hinted String a) where
+    arbitrary = oneof [arbHinted, arbUnhinted]
+        where 
+            arbHintChar = frequency 
+                [ (26, choose ('a','z'))
+                , (26, choose ('A','Z'))
+                , (10, choose ('0','9'))
+                , (1,  return ' ')
+                ]
+            arbHint = sized $ \sz -> replicateM sz arbHintChar
+            arbHinted = sized $ \sz -> do
+                hsz <- choose (0,sz)
+                h <- resize hsz arbHint
+                x <- resize (sz - hsz) arbitrary
+                return (Hinted h x)
+            arbUnhinted = Unhinted <$> arbitrary
+    coarbitrary (Unhinted x) = variant 0 . coarbitrary x
+    coarbitrary (Hinted h x) = variant 1 . coarbitrary x . coarbitrary_h
+        where 
+            coarbitrary_h = foldr (\a b -> variant (ord a) . variant 1 . b) (variant 0) h
+
 
 prop_atoms :: Int -> Bool
 prop_atoms n = Just n == (fromAtom $ atom n)

@@ -13,7 +13,6 @@ import Data.Foldable (Foldable, foldMap)
 import qualified Data.Foldable as F
 import Data.Traversable (Traversable, sequenceA, traverse)
 import Data.Generics (Data, Typeable, Typeable1(..), mkTyCon, mkTyConApp)
-import Test.QuickCheck (Arbitrary(..), variant, choose, oneof, sized, resize, frequency)
 import Data.Char (ord, isAlpha, isAlphaNum, isSpace)
 
 -- |An s-expression consists of atoms and lists of s-expressions.  The atom type 
@@ -107,16 +106,6 @@ instance Traversable l => Traversable (SExpr l) where
     sequenceA  (List xs) = fmap List (traverse sequenceA xs)
     traverse f (Atom  x) = fmap Atom (f x)
     traverse f (List xs) = fmap List (traverse (traverse f) xs)
-
-instance (Arbitrary a, Arbitrary (l (SExpr l a))) => Arbitrary (SExpr l a) where
-    arbitrary = oneof [Atom <$> arbitrary,
-                       List <$> sized arbList]
-        where 
-            arbList sz  = resize (sz `div` 2) arbitrary
-              
-    coarbitrary (Atom a) = variant 0 . coarbitrary a
-    coarbitrary (List l) = variant 1 . coarbitrary l
-
 
 -- |Examine the outermost constructor of the s-expression and pass its
 -- contents to either the first function (in case of an atom) or the second
@@ -283,27 +272,6 @@ instance Foldable (Hinted h) where
 instance Traversable (Hinted h) where
     sequenceA (Hinted h x) = fmap (Hinted h) x
     sequenceA (Unhinted x) = fmap Unhinted   x
-instance Arbitrary a => Arbitrary (Hinted String a) where
-    arbitrary = oneof [arbHinted, arbUnhinted]
-        where 
-            arbHintChar = frequency 
-                [ (26, choose ('a','z'))
-                , (26, choose ('A','Z'))
-                , (10, choose ('0','9'))
-                , (1,  return ' ')
-                ]
-            arbHint = sized $ \sz -> replicateM sz arbHintChar
-            arbHinted = sized $ \sz -> do
-                hsz <- choose (0,sz)
-                h <- resize hsz arbHint
-                x <- resize (sz - hsz) arbitrary
-                return (Hinted h x)
-            arbUnhinted = Unhinted <$> arbitrary
-    coarbitrary (Unhinted x) = variant 0 . coarbitrary x
-    coarbitrary (Hinted h x) = variant 1 . coarbitrary x . coarbitrary_h
-        where 
-            coarbitrary_h = foldr (\a b -> variant (ord a) . variant 1 . b) (variant 0) h
-
 
 -- |Any atom whose hint is not specified is assumed to be 
 -- \"text/plain; charset=iso-8859-1\".  This is that default value.

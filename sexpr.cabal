@@ -1,35 +1,58 @@
-name:                sexpr
-version:             0.3
-cabal-version:	     >= 1.2
-synopsis:            S-expression printer and parser 
-description:         Parser and printer for S-expressions, including Ron 
-                     Rivest's Canonical S-expressions.  These are used in 
-                     SDSI and SPKI, and are generally useful for 
-                     cryptographic operations over structured data.
-category:            Codec
-license:             BSD3
-license-file:        LICENSE
-author:              Brian Sniffen
-maintainer:          bts@evenmere.org
-build-type: 	     Simple
+name:               s-expression
+version:            0.3
+cabal-version:	    >= 1.2
+synopsis:           S-expression printer and parser 
+description:        Modular parser and printer for S-expressions, including
+                    Ron Rivest's Canonical S-expressions, which are used in 
+                    SDSI and SPKI.
+                    
+                    Relatively easy to extend to cover other s-expr-based 
+                    formats such as lisp/scheme source, HLA OMDT documents,
+                    etc.
+                    
+                    Loosely based on Brian Sniffen's \"sexpr\" package
+                    with a different core data type.
+                    
+category:           Data, Codec
+license:            BSD3
+license-file:       LICENSE
+author:             Brian Sniffen, James Cook
+maintainer:         james.cook@usma.edu
+build-type:         Simple
+
+flag base4
+    description: use base package as split at time of base-4 release.
+    default: True
 
 flag testing
     description: build test executable
     default: False
 
 flag old-sexpr-compat
-    description: Include compatibility wrapper module for (sexpr <= 0.2.1)
-    default: True
+    description: include compatibility wrapper module for (sexpr <= 0.2.1)
+    default: False
 
 library
     if flag(testing)
        ghc-options:         -Wall
-    Build-Depends:          base, base64-string, mtl, pretty, bytestring, binary, parsec >= 3
+    if flag(base4)
+      Build-Depends:        base >=4 && <5, syb
+    else
+      Build-Depends:        base >=3 && <4
+    
+    Build-Depends:          base64-string,
+                            binary,
+                            bytestring,
+                            mtl,
+                            pretty,
+                            parsec >= 3
+                            
     hs-source-dirs:         src
     Exposed-modules:        Text.SExpr
                             Text.SExpr.Convert
     if flag(old-sexpr-compat)
         exposed-modules:    Codec.Sexpr
+        build-depends:      QuickCheck < 2.1
     other-modules:          Text.SExpr.Parse
                             Text.SExpr.Print
                             Text.SExpr.Convert.Classes
@@ -40,15 +63,17 @@ executable sexpr-test
     if !flag(testing)
         buildable:          False
         ghc-options:        -Wall
-    hs-source-dirs:         src
+    hs-source-dirs:         tests, src
     main-is:                Tests.hs
-    build-depends:          QuickCheck, random
+    build-depends:          random,
+                            QuickCheck < 2.1
 
 executable compat-sexpr-test
     if !(flag(testing) && flag(old-sexpr-compat))
         buildable:          False
         ghc-options:        -Wall
-    hs-source-dirs:         src
+    hs-source-dirs:         tests, src
     main-is:                CompatTests.hs
-    build-depends:          QuickCheck, random
+    build-depends:          random,
+                            QuickCheck < 2.1
 
