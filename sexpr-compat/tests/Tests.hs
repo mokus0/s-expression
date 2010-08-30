@@ -1,8 +1,10 @@
+-- This is the test suite from sexpr-0.2.1 with tests of internal functions
+-- removed (since the internal implementation is no longer the same, and 
+-- is tested by a different test suite anyway).
+
 module Main where
 
 import Codec.Sexpr
-import Text.SExpr.Parse
-import Text.SExpr.Print
 import Test.QuickCheck
 import Data.Monoid()
 import Text.Show.Functions()
@@ -50,20 +52,20 @@ prop_put_canonicalBS :: Sexpr B.ByteString -> Bool
 prop_put_canonicalBS s = 
     (L.unpack . runPut $ putCanonicalBS s) == (canonicalString $ fmap B.unpack s)
 
-prop_atom_raw :: String -> Bool
-prop_atom_raw s = (readSexprString $ Text.SExpr.Print.raw s "") == atom s
+-- prop_atom_raw :: String -> Bool
+-- prop_atom_raw s = (readSexprString $ Text.SExpr.Print.raw s "") == atom s
 
-prop_atom_token :: String -> Property
-prop_atom_token s = canToken s ==> ((readSexprString s) == atom s)
+-- prop_atom_token :: String -> Property
+-- prop_atom_token s = canToken s ==> ((readSexprString s) == atom s)
 
-prop_atom_hex :: String -> Property
-prop_atom_hex s = canHex s ==> ((readSexprString $ render $ hex s) == atom s)
+-- prop_atom_hex :: String -> Property
+-- prop_atom_hex s = canHex s ==> ((readSexprString $ render $ hex s) == atom s)
 
-prop_atom_quote :: String -> Property
-prop_atom_quote s = canQuote s ==> ((readSexprString $ render $ quote s) == atom s)
+-- prop_atom_quote :: String -> Property
+-- prop_atom_quote s = canQuote s ==> ((readSexprString $ render $ quote s) == atom s)
 
-prop_atom_base64 :: String -> Bool
-prop_atom_base64 s = (readSexprString $ render $ base64 s) == atom s 
+-- prop_atom_base64 :: String -> Bool
+-- prop_atom_base64 s = (readSexprString $ render $ base64 s) == atom s 
 
 instance Arbitrary B.ByteString where
     arbitrary = B.pack `fmap` arbitrary
@@ -93,11 +95,11 @@ tests = [("Atom dis/assembly", mytest prop_atoms)
         ,("canonical input", mytest prop_canonical_in)
         ,("efficient bytestring canonical", mytest prop_put_canonical)
         ,("efficient bytestring canonicalBS", mytest prop_put_canonicalBS)
-        ,("token atom", mytest prop_atom_token)
-        ,("hex atom", mytest prop_atom_hex)
-        ,("quoted atom", mytest prop_atom_quote)
-        ,("raw atom", mytest prop_atom_raw)
-        ,("base64 atom", mytest prop_atom_base64)
+--        ,("token atom", mytest prop_atom_token)
+--        ,("hex atom", mytest prop_atom_hex)
+--        ,("quoted atom", mytest prop_atom_quote)
+--        ,("raw atom", mytest prop_atom_raw)
+--        ,("base64 atom", mytest prop_atom_base64)
         ]
 
 ------------------------------------------------------------------------

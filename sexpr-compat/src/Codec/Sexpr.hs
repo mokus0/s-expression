@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 -- |A Sexpr is an S-expression in the style of Rivest's Canonical
 -- S-expressions.  Atoms may be of any type, but String and
 -- ByteString have special support.  Rivest's implementation of
@@ -42,8 +43,8 @@ module Codec.Sexpr
             canonicalSexpr
     ) where
 
-import Text.SExpr.Type (SExpr(..), Hinted(..))
-import qualified Text.SExpr.Type as S
+import Text.SExpr (SExpr, Hinted)
+import qualified Text.SExpr as S
 import qualified Text.SExpr.Convert as S
 
 import Control.Applicative ((<$>))
@@ -62,13 +63,13 @@ newtype Sexpr a = Sexpr { unSexpr :: (SExpr [] (Hinted String a)) }
     deriving Eq
 
 instance Arbitrary a => Arbitrary (Sexpr a) where
-    arbitrary = oneof [(Sexpr . Atom) <$> arbHintedString,
-                       (Sexpr . List) <$> sized arbList]
+    arbitrary = oneof [(Sexpr . S.atom) <$> arbHintedString,
+                       (Sexpr . S.list) <$> sized arbList]
         where 
             arbList sz  = map unSexpr <$> resize (sz `div` 2) arbitrary
               
-    coarbitrary (Sexpr (Atom a)) = variant 0 . coarbHintedString a
-    coarbitrary (Sexpr (List l)) = variant 1 . coarbitrary (map Sexpr l)
+    coarbitrary (Sexpr (S.fromAtom -> Just a)) = variant 0 . coarbHintedString a
+    coarbitrary (Sexpr (S.fromList -> Just l)) = variant 1 . coarbitrary (map Sexpr l)
 
 arbHintedString :: Arbitrary a => Gen (Hinted String a)
 arbHintedString = oneof [arbHinted, arbUnhinted]
@@ -84,11 +85,11 @@ arbHintedString = oneof [arbHinted, arbUnhinted]
             hsz <- choose (0,sz)
             h <- resize hsz arbHint
             x <- resize (sz - hsz) arbitrary
-            return (Hinted h x)
-        arbUnhinted = Unhinted <$> arbitrary
+            return (S.hinted h x)
+        arbUnhinted = S.unhinted <$> arbitrary
 
-coarbHintedString (Unhinted x) = variant 0 . coarbitrary x
-coarbHintedString (Hinted h x) = variant 1 . coarbitrary x . coarbitrary_h
+coarbHintedString (S.fromHinted -> (Nothing, x)) = variant 0 . coarbitrary x
+coarbHintedString (S.fromHinted -> (Just h,  x)) = variant 1 . coarbitrary x . coarbitrary_h
     where 
         coarbitrary_h = foldr (\a b -> variant (ord a) . variant 1 . b) (variant 0) h
 
@@ -149,8 +150,8 @@ hint = fmap S.hint . S.fromAtom . unSexpr
 -- to the root.  @f@ need not preserve the shape of @s@, in contrast
 -- to the shape-preserving @Traversable@ instance.
 fold :: (Sexpr t -> Sexpr t) -> Sexpr t -> Sexpr t
-fold f z@(Sexpr (Atom  _)) = f z
-fold f   (Sexpr (List ss)) = f . list $ map (fold f . Sexpr) ss
+fold f z@(Sexpr (S.fromAtom -> Just  _)) = f z
+fold f   (Sexpr (S.fromList -> Just ss)) = f . list $ map (fold f . Sexpr) ss
 
 canonicalString :: Sexpr String -> String
 canonicalString (Sexpr s) = S.canonicalString s

@@ -1,0 +1,53 @@
+name:               s-expression-sexpr-compat
+version:            0.3
+cabal-version:	    >= 1.2
+synopsis:           S-expression printer and parser 
+description:        Compatibility layer allowing use of s-expression library
+                    as a drop-in replacement for sexpr library.
+                    
+category:           Data, Codec
+license:            BSD3
+license-file:       LICENSE
+author:             James Cook
+maintainer:         unmaintained
+build-type:         Simple
+
+flag base4
+    description: use base package as split at time of base-4 release.
+    default: True
+
+flag testing
+    description: build test executable
+    default: False
+
+library
+    if flag(testing)
+       ghc-options:         -Wall
+    Build-Depends:          base >=3 && <5
+    
+    Build-Depends:          s-expression == 0.3.*,
+                            binary,
+                            bytestring,
+                            pretty,
+                            QuickCheck < 2.1
+                            
+    hs-source-dirs:         src
+    Exposed-modules:        Codec.Sexpr
+
+executable sexpr-test
+    if !flag(testing)
+        buildable:          False
+        ghc-options:        -Wall
+    hs-source-dirs:         tests, src
+    main-is:                Tests.hs
+    build-depends:          random,
+                            QuickCheck < 2.1
+
+executable compat-sexpr-test
+    if !(flag(testing))
+        buildable:          False
+        ghc-options:        -Wall
+    hs-source-dirs:         tests, src
+    main-is:                Tests.hs
+    build-depends:          random
+
