@@ -17,7 +17,7 @@ category:           Data, Codec
 license:            BSD3
 license-file:       LICENSE
 author:             Brian Sniffen, James Cook
-maintainer:         james.cook@usma.edu
+maintainer:         mokus@deepbondi.net
 build-type:         Simple
 
 flag base4
