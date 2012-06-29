@@ -1,6 +1,6 @@
 name:               s-expression
 version:            0.3
-cabal-version:	    >= 1.2
+cabal-version:	    >= 1.6
 synopsis:           S-expression printer and parser 
 description:        Modular parser and printer for S-expressions, including
                     Ron Rivest's Canonical S-expressions, which are used in 
@@ -19,6 +19,10 @@ license-file:       LICENSE
 author:             Brian Sniffen, James Cook
 maintainer:         mokus@deepbondi.net
 build-type:         Simple
+
+source-repository head
+  type: git
+  location: git://github.com/mokus0/s-expression.git
 
 flag base4
     description: use base package as split at time of base-4 release.
